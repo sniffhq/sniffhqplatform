@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SniffHQ Platform — Provision Tenant</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { background:#f1f5f9; font-family:'Inter',system-ui,sans-serif; }
+    .topbar { background:#1B2D4F; color:white; padding:14px 24px;
+              display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-size:1.2rem; font-weight:800; letter-spacing:-0.5px; }
+    .logo span { color:#3DBDB5; }
+    .badge-platform { background:rgba(61,189,181,.2); color:#3DBDB5;
+                      font-size:.65rem; font-weight:700; padding:2px 8px;
+                      border-radius:20px; letter-spacing:.5px; }
+    .card { border:none; border-radius:14px; box-shadow:0 2px 12px rgba(0,0,0,.06); }
+    .form-label { font-size:.85rem; font-weight:600; color:#374151; }
+    .slug-preview { background:#e0f7f5; color:#0f766e; border-radius:8px;
+                    padding:8px 14px; font-size:.85rem; font-weight:600;
+                    font-family:monospace; display:none; margin-top:6px; }
+    .btn-provision { background:#1B2D4F; border:none; color:white;
+                     font-weight:700; padding:12px; font-size:1rem; }
+    .btn-provision:hover { background:#142240; color:white; }
+    .checklist { background:#f8fafc; border-radius:10px; padding:16px 20px;
+                 border-left:3px solid #3DBDB5; font-size:.85rem; color:#475569; }
+    .checklist li { margin-bottom:6px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <span class="logo">Sniff<span>HQ</span></span>
+    <span class="badge-platform ms-2">PLATFORM</span>
+  </div>
+  <a href="{{ url_for('monitoring') }}" class="btn btn-sm btn-outline-light me-1">
+    <i class="fas fa-tachometer-alt me-1"></i> Monitoring
+  </a>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-outline-light">
+    <i class="fas fa-arrow-left me-1"></i> Dashboard
+  </a>
+</div>
+
+<div class="container py-4" style="max-width:640px;">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ 'danger' if cat == 'error' else cat }} mb-3" role="alert">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <h5 class="fw-bold mb-1" style="color:#1B2D4F;">Provision New Tenant</h5>
+  <p class="text-muted mb-4" style="font-size:.875rem;">
+    Confirm payment in Wave, then fill in the details below. A welcome email with a login link will be sent automatically.
+  </p>
+
+  <!-- Pre-flight checklist -->
+  <div class="checklist mb-4">
+    <strong style="color:#1B2D4F;">Before provisioning, confirm:</strong>
+    <ul class="mt-2 mb-0 ps-3">
+      <li>Payment verified in Wave dashboard</li>
+      <li>Email matches what the customer submitted via the signup form</li>
+      <li>Business name is spelled correctly — it becomes the subdomain</li>
+    </ul>
+  </div>
+
+  <div class="card p-4">
+    <form method="POST" action="{{ url_for('provision') }}" id="provision-form">
+
+      <div class="mb-3">
+        <label class="form-label">Customer Email <span class="text-danger">*</span></label>
+        <input type="email" name="email" class="form-control"
+               value="{{ prefill.email if prefill else '' }}"
+               placeholder="janedoe@gmail.com" required>
+        <div class="form-text">This becomes their login — must match what they provided.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Business Name <span class="text-danger">*</span></label>
+        <input type="text" name="business_name" class="form-control" id="business-name"
+               value="{{ prefill.business_name if prefill else '' }}"
+               placeholder="Jane's Pet Paradise" required>
+        <div class="slug-preview" id="slug-preview">
+          Subdomain: <span id="slug-value"></span>.sniffhq.app
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Tier <span class="text-danger">*</span></label>
+        <select name="tier" class="form-select" required>
+          <option value="">— Select tier —</option>
+          {% for key, label in tier_labels.items() %}
+          <option value="{{ key }}"
+            {{ 'selected' if prefill and prefill.tier == key }}>
+            {{ label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label">Notes <span class="text-muted fw-normal">(optional)</span></label>
+        <textarea name="notes" class="form-control" rows="2"
+                  placeholder="e.g. Referred by Ashley, migrating from Gingr">{{ prefill.notes if prefill else '' }}</textarea>
+      </div>
+
+      <button type="submit" class="btn btn-provision w-100 rounded-3" id="provision-btn">
+        <i class="fas fa-rocket me-2"></i> Provision Tenant & Send Welcome Email
+      </button>
+    </form>
+  </div>
+
+  <p class="text-center mt-3" style="font-size:.78rem;color:#94a3b8;">
+    This will create the tenant database, generate setup scripts, and email the customer their login link.
+  </p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Live slug preview
+function slugify(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 50);
+}
+const nameInput    = document.getElementById('business-name');
+const slugPreview  = document.getElementById('slug-preview');
+const slugValue    = document.getElementById('slug-value');
+
+nameInput.addEventListener('input', function () {
+  const slug = slugify(this.value);
+  if (slug) {
+    slugValue.textContent = slug;
+    slugPreview.style.display = 'block';
+  } else {
+    slugPreview.style.display = 'none';
+  }
+});
+
+// Trigger on prefill
+if (nameInput.value) nameInput.dispatchEvent(new Event('input'));
+
+// Prevent double-submit
+document.getElementById('provision-form').addEventListener('submit', function () {
+  var btn = document.getElementById('provision-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Provisioning…';
+});
+</script>
+</body>
+</html>

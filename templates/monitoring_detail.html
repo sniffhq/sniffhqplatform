@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ tenant.business_name }} — Monitoring</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { background:#f1f5f9; font-family:'Inter',system-ui,sans-serif; }
+    .topbar { background:#1B2D4F; color:white; padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-size:1.2rem; font-weight:800; letter-spacing:-0.5px; }
+    .logo span { color:#3DBDB5; }
+    .badge-platform { background:rgba(61,189,181,.2); color:#3DBDB5; font-size:.65rem; font-weight:700; padding:2px 8px; border-radius:20px; letter-spacing:.5px; }
+    .status-bar { padding:.65rem 1.5rem; display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap; font-size:.83rem; }
+    .status-bar.up   { background:#d1fae5; color:#065f46; border-bottom:2px solid #6ee7b7; }
+    .status-bar.down { background:#fee2e2; color:#991b1b; border-bottom:2px solid #fca5a5; }
+    .section-card { background:white; border-radius:14px; box-shadow:0 2px 12px rgba(0,0,0,.06); padding:1.5rem; margin-bottom:1.5rem; }
+    .section-title { font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#94a3b8; margin-bottom:1rem; }
+    .metric-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:.75rem; }
+    .metric-cell { background:#f8fafc; border-radius:10px; padding:.85rem 1rem; }
+    .metric-val { font-size:1.6rem; font-weight:800; color:#1B2D4F; line-height:1; }
+    .metric-val.teal   { color:#3DBDB5; }
+    .metric-val.green  { color:#22c55e; }
+    .metric-val.yellow { color:#f59e0b; }
+    .metric-val.red    { color:#ef4444; }
+    .metric-lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; margin-top:.3rem; }
+    .health-ring-lg { width:80px; height:80px; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; border:5px solid currentColor; }
+    .health-num { font-size:1.6rem; font-weight:900; line-height:1; }
+    .health-lbl { font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; opacity:.7; }
+    .kv-row { display:flex; gap:2rem; flex-wrap:wrap; }
+    .kv { display:flex; flex-direction:column; }
+    .kv-label { font-size:.7rem; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+    .kv-val { font-size:.9rem; font-weight:600; color:#1B2D4F; font-family:monospace; }
+    .err-log { background:#0d1117; border-radius:10px; padding:1rem; max-height:320px; overflow-y:auto; font-family:monospace; font-size:.75rem; color:#ef4444; }
+    .err-log div { margin-bottom:3px; padding-bottom:3px; border-bottom:1px solid #1e293b; }
+    .err-log div:last-child { border-bottom:none; }
+    .pulse { display:inline-block; width:10px; height:10px; border-radius:50%; }
+    .pulse.up   { background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.2); }
+    .pulse.down { background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.2); }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <span class="logo">Sniff<span>HQ</span></span>
+    <span class="badge-platform ms-2">PLATFORM</span>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <a href="{{ url_for('monitoring') }}" class="btn btn-sm btn-outline-light">
+      <i class="fas fa-arrow-left me-1"></i> All Tenants
+    </a>
+    <a href="{{ cfg.base_url }}" target="_blank" class="btn btn-sm btn-outline-light">
+      <i class="fas fa-external-link-alt me-1"></i> Visit App
+    </a>
+    <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-light ms-2">Sign Out</a>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar {% if svc_up %}up{% else %}down{% endif %}">
+  <span class="pulse {% if svc_up %}up{% else %}down{% endif %}"></span>
+  <strong>{{ tenant.business_name }}</strong>
+  <span>
+    {% if svc_up %}
+      Service Online
+      {% if resp_ms %}&nbsp;·&nbsp;<strong>{{ resp_ms }}ms</strong> response time{% endif %}
+    {% else %}
+      Service DOWN — NSSM service not responding
+    {% endif %}
+  </span>
+  <span class="ms-auto" style="font-size:.78rem;opacity:.75;">
+    <i class="fas fa-sync-alt me-1"></i> {{ now }}
+    &nbsp;·&nbsp;
+    <a href="{{ request.path }}" style="color:inherit;text-decoration:underline;opacity:.8;">Refresh</a>
+  </span>
+</div>
+
+<div class="container-fluid p-4">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ 'danger' if cat == 'error' else cat }} alert-dismissible fade show">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Overview row -->
+  <div class="row g-4 mb-2">
+    <!-- Health score -->
+    <div class="col-md-3 col-6">
+      <div class="section-card h-100 d-flex flex-column align-items-center justify-content-center text-center">
+        <div class="section-title">Health Score</div>
+        <div class="health-ring-lg" style="color:{{ health_color }};">
+          <div class="health-num" style="color:{{ health_color }};">{{ health_score }}</div>
+          <div class="health-lbl" style="color:{{ health_color }};">/ 100</div>
+        </div>
+        <div class="mt-3" style="font-size:.8rem;color:#64748b;">
+          {% if health_score >= 80 %}All systems healthy
+          {% elif health_score >= 50 %}Degraded performance
+          {% else %}Critical issues detected{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Config info -->
+    <div class="col-md-9 col-6">
+      <div class="section-card h-100">
+        <div class="section-title">Tenant Info</div>
+        <div class="kv-row">
+          <div class="kv">
+            <span class="kv-label">Slug</span>
+            <span class="kv-val">{{ cfg.id }}</span>
+          </div>
+          <div class="kv">
+            <span class="kv-label">Tier</span>
+            <span class="kv-val">{{ tenant.tier | title }}</span>
+          </div>
+          <div class="kv">
+            <span class="kv-label">Email</span>
+            <span class="kv-val">{{ tenant.email }}</span>
+          </div>
+          <div class="kv">
+            <span class="kv-label">Port</span>
+            <span class="kv-val">{{ cfg.port }}</span>
+          </div>
+          <div class="kv">
+            <span class="kv-label">URL</span>
+            <span class="kv-val">{{ cfg.id }}.sniffhq.app</span>
+          </div>
+          <div class="kv">
+            <span class="kv-label">NSSM Service</span>
+            <span class="kv-val">{{ cfg.nssm_service }}</span>
+          </div>
+          <div class="kv">
+            <span class="kv-label">Provisioned</span>
+            <span class="kv-val">{{ tenant.provisioned_at.strftime('%Y-%m-%d') if tenant.provisioned_at else '—' }}</span>
+          </div>
+          <div class="kv">
+            <span class="kv-label">Status</span>
+            <span class="kv-val" style="color:{% if tenant.status == 'active' %}#22c55e{% else %}#ef4444{% endif %};">
+              {{ tenant.status | title }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application metrics -->
+  <div class="section-card">
+    <div class="section-title">Application Metrics</div>
+    <div class="metric-grid">
+      <div class="metric-cell">
+        <div class="metric-val teal">{{ metrics.customers }}</div>
+        <div class="metric-lbl">Total Customers</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-val">{{ metrics.active_boardings }}</div>
+        <div class="metric-lbl">Active Boardings</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-val">{{ metrics.daycare_enrolled }}</div>
+        <div class="metric-lbl">Daycare Enrolled</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-val teal">{{ metrics.sms_today }}</div>
+        <div class="metric-lbl">SMS Today</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-val {% if metrics.sms_failures > 5 %}red{% else %}green{% endif %}">{{ metrics.sms_failures }}</div>
+        <div class="metric-lbl">SMS Failures</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-val {% if metrics.open_tickets > 5 %}yellow{% else %}teal{% endif %}">{{ metrics.open_tickets }}</div>
+        <div class="metric-lbl">Open Tickets</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-val" style="font-size:1.3rem;">${{ "%.0f"|format(metrics.revenue_month) }}</div>
+        <div class="metric-lbl">Revenue MTD</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-val {% if metrics.failed_logins > 20 %}red{% elif metrics.failed_logins > 5 %}yellow{% else %}green{% endif %}">
+          {{ metrics.failed_logins }}
+        </div>
+        <div class="metric-lbl">Failed Logins</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-val {% if error_count > 10 %}red{% elif error_count > 3 %}yellow{% else %}green{% endif %}">
+          {{ error_count }}
+        </div>
+        <div class="metric-lbl">Errors (24h)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Errors -->
+  <div class="section-card">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div class="section-title mb-0">Error Log (last 25 lines)</div>
+      <span class="badge" style="background:#fee2e2;color:#991b1b;">{{ error_count }} errors (24h)</span>
+    </div>
+    {% if recent_errors %}
+      <div class="err-log">
+        {% for line in recent_errors %}<div>{{ line }}</div>{% endfor %}
+      </div>
+    {% else %}
+      <div class="text-center py-4" style="color:#94a3b8;font-size:.85rem;">
+        <i class="fas fa-check-circle me-2" style="color:#22c55e;"></i>No recent errors
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Snapshots table -->
+  {% if snapshots %}
+  <div class="section-card">
+    <div class="section-title">Recent Snapshots (last 12)</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover" style="font-size:.82rem;">
+        <thead style="color:#64748b;font-size:.7rem;">
+          <tr>
+            <th>Time</th>
+            <th>Service</th>
+            <th>Resp (ms)</th>
+            <th>CPU %</th>
+            <th>Mem %</th>
+            <th>Errors</th>
+            <th>SMS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in snapshots %}
+          <tr>
+            <td class="text-muted">{{ s.ts.strftime('%m/%d %H:%M') }}</td>
+            <td>
+              {% if s.svc_up %}
+                <span class="badge" style="background:#d1fae5;color:#065f46;">Up</span>
+              {% else %}
+                <span class="badge" style="background:#fee2e2;color:#991b1b;">Down</span>
+              {% endif %}
+            </td>
+            <td>{{ s.resp_ms if s.resp_ms else '—' }}</td>
+            <td>{{ "%.0f"|format(s.cpu_pct) if s.cpu_pct else '—' }}</td>
+            <td>{{ "%.0f"|format(s.mem_pct) if s.mem_pct else '—' }}</td>
+            <td>{{ s.error_cnt if s.error_cnt is not none else '—' }}</td>
+            <td>{{ s.sms_sent if s.sms_sent is not none else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>setTimeout(function(){ location.reload(); }, 60000);</script>
+</body>
+</html>

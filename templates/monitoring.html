@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitoring — SniffHQ Platform</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { background:#f1f5f9; font-family:'Inter',system-ui,sans-serif; }
+    .topbar { background:#1B2D4F; color:white; padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-size:1.2rem; font-weight:800; letter-spacing:-0.5px; }
+    .logo span { color:#3DBDB5; }
+    .badge-platform { background:rgba(61,189,181,.2); color:#3DBDB5; font-size:.65rem; font-weight:700; padding:2px 8px; border-radius:20px; letter-spacing:.5px; }
+    .stat-card { background:white; border-radius:12px; padding:20px 24px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+    .stat-num { font-size:2rem; font-weight:800; color:#1B2D4F; line-height:1; }
+    .stat-label { font-size:.78rem; color:#64748b; margin-top:4px; }
+    .app-card { background:white; border-radius:14px; box-shadow:0 2px 12px rgba(0,0,0,.06); overflow:hidden; margin-bottom:1.25rem; }
+    .app-card-header { padding:1rem 1.5rem; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #f1f5f9; }
+    .app-card-body { padding:1.25rem 1.5rem; }
+    .metric-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:.75rem; }
+    .metric-cell { background:#f8fafc; border-radius:10px; padding:.75rem 1rem; }
+    .metric-val { font-size:1.5rem; font-weight:800; color:#1B2D4F; line-height:1; }
+    .metric-val.green  { color:#22c55e; }
+    .metric-val.yellow { color:#f59e0b; }
+    .metric-val.red    { color:#ef4444; }
+    .metric-val.teal   { color:#3DBDB5; }
+    .metric-lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; margin-top:.25rem; }
+    .health-ring { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:800; border:3px solid currentColor; }
+    .pulse { display:inline-block; width:8px; height:8px; border-radius:50%; }
+    .pulse.up   { background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.2); }
+    .pulse.down { background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.2); }
+    .err-log { background:#0d1117; border-radius:8px; padding:.75rem; max-height:110px; overflow-y:auto; font-family:monospace; font-size:.72rem; color:#ef4444; }
+    .err-log div { margin-bottom:2px; border-bottom:1px solid #1e293b; padding-bottom:2px; }
+    .sys-bar { background:#1B2D4F; color:white; padding:.6rem 1.5rem; display:flex; gap:2rem; flex-wrap:wrap; font-size:.82rem; }
+    .sys-item { display:flex; align-items:center; gap:.4rem; }
+    .sys-item .lbl { color:rgba(255,255,255,.55); }
+    .sys-item .val { font-weight:700; }
+    .sys-item .val.ok  { color:#3DBDB5; }
+    .sys-item .val.warn { color:#f59e0b; }
+    .sys-item .val.crit { color:#ef4444; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <span class="logo">Sniff<span>HQ</span></span>
+    <span class="badge-platform ms-2">PLATFORM</span>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-outline-light">
+      <i class="fas fa-th-large me-1"></i> Tenants
+    </a>
+    <a href="{{ url_for('monitoring_alerts') }}" class="btn btn-sm btn-outline-light">
+      <i class="fas fa-bell me-1"></i> Alerts
+    </a>
+    <a href="{{ url_for('monitoring_api') }}" class="btn btn-sm btn-outline-light" target="_blank">
+      <i class="fas fa-code me-1"></i> JSON
+    </a>
+    <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-light ms-2">Sign Out</a>
+  </div>
+</div>
+
+<!-- Server bar -->
+<div class="sys-bar">
+  <div class="sys-item">
+    <span class="lbl">CPU</span>
+    <span class="val {% if sys_metrics.cpu and sys_metrics.cpu > 85 %}crit{% elif sys_metrics.cpu and sys_metrics.cpu > 70 %}warn{% else %}ok{% endif %}">
+      {{ "%.0f"|format(sys_metrics.cpu) if sys_metrics.cpu is not none else "—" }}%
+    </span>
+  </div>
+  <div class="sys-item">
+    <span class="lbl">Memory</span>
+    <span class="val {% if sys_metrics.memory and sys_metrics.memory > 85 %}crit{% elif sys_metrics.memory and sys_metrics.memory > 70 %}warn{% else %}ok{% endif %}">
+      {{ "%.0f"|format(sys_metrics.memory) if sys_metrics.memory is not none else "—" }}%
+    </span>
+  </div>
+  <div class="sys-item">
+    <span class="lbl">Disk C:\</span>
+    <span class="val {% if sys_metrics.disk and sys_metrics.disk > 90 %}crit{% elif sys_metrics.disk and sys_metrics.disk > 75 %}warn{% else %}ok{% endif %}">
+      {{ "%.0f"|format(sys_metrics.disk) if sys_metrics.disk is not none else "—" }}%
+    </span>
+  </div>
+  <div class="sys-item">
+    <span class="lbl">Uptime</span>
+    <span class="val ok">{{ sys_metrics.uptime_hrs if sys_metrics.uptime_hrs is not none else "—" }}h</span>
+  </div>
+  <div class="sys-item ms-auto">
+    <span class="lbl">Snapshot</span>
+    <span class="val ok">{{ now }}</span>
+  </div>
+  <div class="sys-item">
+    <a href="{{ url_for('monitoring') }}" class="btn btn-sm" style="background:rgba(61,189,181,.2);color:#3DBDB5;border:none;font-size:.75rem;">
+      <i class="fas fa-rotate-right"></i> Refresh
+    </a>
+  </div>
+</div>
+
+<div class="container-fluid p-4">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ 'danger' if cat == 'error' else cat }} alert-dismissible fade show">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Summary stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        {% set up = app_data | selectattr('svc_up') | list | length %}
+        <div class="stat-num" style="color:{% if up == app_data|length %}#22c55e{% elif up == 0 %}#ef4444{% else %}#f59e0b{% endif %}">
+          {{ up }}<span style="font-size:1.1rem;font-weight:500;color:#94a3b8;">/{{ app_data|length }}</span>
+        </div>
+        <div class="stat-label">Services Online</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num" style="color:#3DBDB5;">
+          {{ app_data | sum(attribute='metrics.customers') }}
+        </div>
+        <div class="stat-label">Total Customers</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num">{{ app_data | sum(attribute='metrics.active_boardings') }}</div>
+        <div class="stat-label">Active Boardings</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        {% set total_errors = app_data | sum(attribute='error_count') %}
+        <div class="stat-num" style="color:{% if total_errors > 20 %}#ef4444{% elif total_errors > 5 %}#f59e0b{% else %}#22c55e{% endif %}">
+          {{ total_errors }}
+        </div>
+        <div class="stat-label">Total Errors (24h)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Per-tenant cards -->
+  {% if app_data %}
+    {% for a in app_data %}
+    <div class="app-card">
+      <div class="app-card-header">
+        <div class="d-flex align-items-center gap-3">
+          <span class="pulse {% if a.svc_up %}up{% else %}down{% endif %}"></span>
+          <span style="font-weight:800;font-size:1rem;color:#1B2D4F;">{{ a.cfg.name }}</span>
+          {% if a.svc_up %}
+            <span class="badge" style="background:#d1fae5;color:#065f46;">Online</span>
+          {% else %}
+            <span class="badge" style="background:#fee2e2;color:#991b1b;">Down</span>
+          {% endif %}
+          {% if a.resp_ms %}
+            <span class="badge {% if a.resp_ms > 2000 %}bg-warning text-dark{% else %}bg-light text-muted{% endif %}">
+              {{ a.resp_ms }}ms
+            </span>
+          {% endif %}
+          <span class="badge" style="background:#e0f2fe;color:#0369a1;font-size:.65rem;">
+            {{ a.cfg.tier | title }}
+          </span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <div class="health-ring" style="color:{{ a.health_color }};">{{ a.health_score }}</div>
+          <a href="{{ url_for('monitoring_detail', slug=a.cfg.id) }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-arrow-right"></i>
+          </a>
+          <a href="{{ a.cfg.base_url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-external-link-alt"></i>
+          </a>
+        </div>
+      </div>
+      <div class="app-card-body">
+        <div class="metric-grid">
+          <div class="metric-cell">
+            <div class="metric-val teal">{{ a.metrics.customers }}</div>
+            <div class="metric-lbl">Customers</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-val">{{ a.metrics.active_boardings }}</div>
+            <div class="metric-lbl">Active Boardings</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-val">{{ a.metrics.daycare_enrolled }}</div>
+            <div class="metric-lbl">Daycare Enrolled</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-val teal">{{ a.metrics.sms_today }}</div>
+            <div class="metric-lbl">SMS Today</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-val" style="font-size:1.2rem;">${{ "%.0f"|format(a.metrics.revenue_month) }}</div>
+            <div class="metric-lbl">Revenue MTD</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-val {% if a.error_count > 10 %}red{% elif a.error_count > 3 %}yellow{% else %}green{% endif %}">
+              {{ a.error_count }}
+            </div>
+            <div class="metric-lbl">Errors (24h)</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-val {% if a.metrics.open_tickets > 5 %}yellow{% else %}teal{% endif %}">
+              {{ a.metrics.open_tickets }}
+            </div>
+            <div class="metric-lbl">Open Tickets</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-val {% if a.metrics.sms_failures > 5 %}red{% else %}green{% endif %}">
+              {{ a.metrics.sms_failures }}
+            </div>
+            <div class="metric-lbl">SMS Failures</div>
+          </div>
+        </div>
+        {% if a.recent_errors %}
+        <div class="mt-3">
+          <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;margin-bottom:.4rem;">
+            Recent Errors
+          </div>
+          <div class="err-log">
+            {% for line in a.recent_errors %}<div>{{ line }}</div>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="text-center py-5" style="color:#94a3b8;">
+      <i class="fas fa-satellite-dish fa-2x mb-3 d-block opacity-30"></i>
+      No active tenants with assigned ports yet.<br>
+      <a href="{{ url_for('provision') }}" style="color:#3DBDB5;">Provision your first tenant</a> to start monitoring.
+    </div>
+  {% endif %}
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Auto-refresh every 60 seconds
+setTimeout(function(){ location.reload(); }, 60000);
+</script>
+</body>
+</html>

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SniffHQ Platform — Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { background:#f1f5f9; font-family:'Inter',system-ui,sans-serif; }
+    .topbar { background:#1B2D4F; color:white; padding:14px 24px;
+              display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-size:1.2rem; font-weight:800; letter-spacing:-0.5px; }
+    .logo span { color:#3DBDB5; }
+    .badge-platform { background:rgba(61,189,181,.2); color:#3DBDB5;
+                      font-size:.65rem; font-weight:700; padding:2px 8px;
+                      border-radius:20px; letter-spacing:.5px; }
+    .stat-card { background:white; border-radius:12px; padding:20px 24px;
+                 box-shadow:0 1px 4px rgba(0,0,0,.06); }
+    .stat-num { font-size:2rem; font-weight:800; color:#1B2D4F; line-height:1; }
+    .stat-label { font-size:.8rem; color:#64748b; margin-top:4px; }
+    .table th { font-size:.75rem; font-weight:700; color:#64748b;
+                text-transform:uppercase; letter-spacing:.5px; border-top:none; }
+    .table td { vertical-align:middle; font-size:.875rem; }
+    .badge-active { background:#d1fae5; color:#065f46; font-size:.7rem;
+                    padding:3px 10px; border-radius:20px; font-weight:700; }
+    .badge-suspended { background:#fee2e2; color:#991b1b; font-size:.7rem;
+                       padding:3px 10px; border-radius:20px; font-weight:700; }
+    .badge-tier { background:#e0f2fe; color:#0369a1; font-size:.7rem;
+                  padding:2px 8px; border-radius:20px; font-weight:600; }
+    .badge-tier.professional { background:#fef3c7; color:#92400e; }
+    .badge-tier.enterprise   { background:#ede9fe; color:#5b21b6; }
+    .btn-sm-act { font-size:.75rem; padding:3px 10px; border-radius:6px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <span class="logo">Sniff<span>HQ</span></span>
+    <span class="badge-platform ms-2">PLATFORM</span>
+  </div>
+  <div class="d-flex align-items:center gap-3">
+    <a href="{{ url_for('monitoring') }}" class="btn btn-sm btn-outline-light me-1">
+      <i class="fas fa-tachometer-alt me-1"></i> Monitoring
+    </a>
+    <a href="{{ url_for('provision') }}" class="btn btn-sm fw-semibold"
+       style="background:#3DBDB5;color:white;border:none;">
+      <i class="fas fa-plus me-1"></i> Provision Tenant
+    </a>
+    <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-light ms-2">Sign Out</a>
+  </div>
+</div>
+
+<div class="container-fluid p-4">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ 'danger' if cat == 'error' else ('warning' if cat == 'warning' else 'success') }} alert-dismissible fade show" role="alert">
+        {{ msg }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num">{{ tenants|length }}</div>
+        <div class="stat-label">Total Tenants</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num">{{ tenants|selectattr('status','equalto','active')|list|length }}</div>
+        <div class="stat-label">Active</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num">{{ tenants|selectattr('tier','equalto','professional')|list|length }}</div>
+        <div class="stat-label">Professional</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-num">{{ tenants|selectattr('tier','equalto','enterprise')|list|length }}</div>
+        <div class="stat-label">Enterprise</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tenants table -->
+  <div class="card border-0 shadow-sm" style="border-radius:12px;overflow:hidden;">
+    <div class="card-header bg-white border-bottom py-3 px-4 d-flex align-items:center justify-content-between">
+      <h6 class="mb-0 fw-bold" style="color:#1B2D4F;">All Tenants</h6>
+    </div>
+    <div class="card-body p-0">
+      {% if tenants %}
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th class="px-4">Business</th>
+            <th>Email</th>
+            <th>Tier</th>
+            <th>URL</th>
+            <th>Port</th>
+            <th>Status</th>
+            <th>Provisioned</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in tenants %}
+          <tr>
+            <td class="px-4 fw-semibold" style="color:#1B2D4F;">{{ t.business_name }}</td>
+            <td style="color:#475569;">{{ t.email }}</td>
+            <td>
+              <span class="badge-tier {{ t.tier }}">{{ t.tier|title }}</span>
+            </td>
+            <td>
+              <a href="https://{{ t.slug }}.sniffhq.app" target="_blank"
+                 style="color:#3DBDB5;font-size:.8rem;">
+                {{ t.slug }}.sniffhq.app <i class="fas fa-external-link-alt" style="font-size:.65rem;"></i>
+              </a>
+            </td>
+            <td style="color:#64748b;">{{ t.port or '—' }}</td>
+            <td>
+              {% if t.status == 'active' %}
+                <span class="badge-active">Active</span>
+              {% else %}
+                <span class="badge-suspended">Suspended</span>
+              {% endif %}
+            </td>
+            <td style="color:#64748b;font-size:.8rem;">
+              {{ t.provisioned_at.strftime('%b %d, %Y') if t.provisioned_at }}
+            </td>
+            <td class="pe-4">
+              <div class="d-flex gap-1">
+                <!-- Resend welcome -->
+                <form method="POST" action="{{ url_for('resend_welcome', tenant_id=t.id) }}"
+                      onsubmit="return confirm('Resend welcome email to {{ t.email }}?')">
+                  <button class="btn btn-sm btn-outline-secondary btn-sm-act" title="Resend welcome email">
+                    <i class="fas fa-envelope"></i>
+                  </button>
+                </form>
+                <!-- Suspend / Activate -->
+                {% if t.status == 'active' %}
+                <form method="POST" action="{{ url_for('suspend_tenant', tenant_id=t.id) }}"
+                      onsubmit="return confirm('Suspend {{ t.business_name }}?')">
+                  <button class="btn btn-sm btn-outline-warning btn-sm-act" title="Suspend">
+                    <i class="fas fa-pause"></i>
+                  </button>
+                </form>
+                {% else %}
+                <form method="POST" action="{{ url_for('activate_tenant', tenant_id=t.id) }}">
+                  <button class="btn btn-sm btn-outline-success btn-sm-act" title="Activate">
+                    <i class="fas fa-play"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% if t.notes %}
+          <tr style="background:#f8fafc;">
+            <td colspan="8" class="px-4 py-1" style="font-size:.78rem;color:#64748b;border-top:none;">
+              <i class="fas fa-sticky-note me-1"></i>{{ t.notes }}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="text-center py-5" style="color:#94a3b8;">
+        <i class="fas fa-store fa-2x mb-3 d-block opacity-30"></i>
+        No tenants yet. <a href="{{ url_for('provision') }}">Provision your first tenant.</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
