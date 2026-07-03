@@ -133,6 +133,11 @@ FLASK_DEBUG=0
 
 def _init_db(db_path: Path, secret_key: str, business_name: str, tier: str):
     """Run db.create_all() inside the SniffHQDemo app with tenant env vars."""
+    # Use SniffHQDemo's own venv Python so all its models/deps are available
+    demo_python = SNIFFHQ_APP_DIR / 'venv' / 'Scripts' / 'python.exe'
+    if not demo_python.exists():
+        raise ProvisionError(f"SniffHQDemo venv Python not found at {demo_python}")
+
     env = {
         **os.environ,
         'SECRET_KEY':   secret_key,
@@ -147,14 +152,14 @@ def _init_db(db_path: Path, secret_key: str, business_name: str, tier: str):
         "print('schema ok')"
     )
     result = subprocess.run(
-        [sys.executable, '-c', init_script],
+        [str(demo_python), '-c', init_script],
         cwd=str(SNIFFHQ_APP_DIR),
         env=env,
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        raise ProvisionError(f"db.create_all() failed:\n{result.stderr}")
+        raise ProvisionError(f"db.create_all() failed:\n{result.stderr}\n{result.stdout}")
 
     # Seed BusinessSettings row
     db_tier = TIER_DB_MAP.get(tier.lower(), 'starter')
