@@ -269,6 +269,19 @@ def resend_welcome(tenant_id):
     return redirect(url_for('dashboard'))
 
 
+@app.route('/tenants/<int:tenant_id>/activate-ssl', methods=['POST'])
+@login_required
+def activate_ssl(tenant_id):
+    t = Tenant.query.get_or_404(tenant_id)
+    try:
+        from provisioner import provision_ssl, ProvisionError
+        provision_ssl(t.slug)
+        flash(f'SSL certificate activated for {t.slug}.sniffhq.app.', 'success')
+    except Exception as e:
+        flash(f'SSL activation failed: {e}', 'error')
+    return redirect(url_for('dashboard'))
+
+
 # ── Monitoring routes ──────────────────────────────────────────────────────────
 
 ALERT_METRICS = [
