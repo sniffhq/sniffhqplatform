@@ -147,18 +147,31 @@ def _init_db(db_path: Path, secret_key: str, business_name: str, tier: str):
         )
 
     schema = SCHEMA_SQL.read_text(encoding='utf-8')
+    # Split on semicolons; skip blank/comment-only chunks
+    stmts = [s.strip() for s in schema.split(';') if s.strip() and not s.strip().startswith('--')]
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
     try:
-        conn.executescript(schema)
+        cur = conn.cursor()
+        for stmt in stmts:
+            try:
+                cur.execute(stmt)
+            except sqlite3.OperationalError as e:
+                if 'already exists' not in str(e).lower():
+                    raise ProvisionError(f"Schema error: {e} | {stmt[:120]}")
         conn.commit()
 
         # Verify the critical table exists
-        cur = conn.cursor()
         cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='business_settings'")
         if not cur.fetchone():
-            raise ProvisionError("business_settings table missing after applying schema.sql.")
+            # List what tables we DO have for debugging
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            found = [r[0] for r in cur.fetchall()]
+            raise ProvisionError(
+                f"business_settings table missing after applying schema.sql. "
+                f"Tables created: {found}"
+            )
 
         # Seed BusinessSettings row
         db_tier = TIER_DB_MAP.get(tier.lower(), 'starter')
