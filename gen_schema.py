@@ -1,15 +1,17 @@
 """
-Run this from C:\SniffHQDemo using its venv to generate schema.sql:
-
-    cd C:\SniffHQDemo
-    venv\Scripts\python.exe C:\SniffHQPlatform\gen_schema.py
+Run from anywhere using SniffHQDemo venv:
+    C:\\SniffHQDemo\\venv\\Scripts\\python.exe C:\\SniffHQPlatform\\gen_schema.py
 """
 import sys
 import os
 import sqlite3
 import tempfile
 
-sys.path.insert(0, '.')
+DEMO_DIR = r'C:\SniffHQDemo'
+# Insert at 0 so it beats the script's own directory in sys.path
+sys.path.insert(0, DEMO_DIR)
+os.chdir(DEMO_DIR)
+
 os.environ.setdefault('SECRET_KEY', 'schema-gen-tmp')
 
 tmp_db = os.path.join(tempfile.gettempdir(), 'sniffhq_schema_gen.db')
