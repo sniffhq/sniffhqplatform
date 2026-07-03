@@ -131,48 +131,46 @@ FLASK_DEBUG=0
 
 # ── Step 2: Init DB ───────────────────────────────────────────────────────────
 
+# schema.sql lives next to this file
+SCHEMA_SQL = Path(__file__).parent / 'schema.sql'
+
+
 def _init_db(db_path: Path, secret_key: str, business_name: str, tier: str):
     """
-    Clone the schema from the live SniffHQDemo database into the tenant DB,
-    then seed a BusinessSettings row. This avoids subprocess/venv issues entirely.
+    Apply the static schema.sql to a fresh tenant SQLite DB, then seed
+    a BusinessSettings row. No demo DB or external venv required.
     """
-    demo_db = SNIFFHQ_APP_DIR / 'instance' / 'sniffhq.db'
-    if not demo_db.exists():
-        raise ProvisionError(f"Demo database not found at {demo_db} — ensure SniffHQDemo has been run at least once.")
-
-    # Extract CREATE TABLE + CREATE INDEX statements from the demo DB
-    demo_conn = sqlite3.connect(str(demo_db))
-    schema_stmts = []
-    for row in demo_conn.execute(
-        "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type DESC, name"
-    ):
-        schema_stmts.append(row[0])
-    demo_conn.close()
-
-    if not schema_stmts:
-        raise ProvisionError("Demo database schema is empty — run SniffHQDemo once to populate it.")
-
-    # Apply schema to fresh tenant DB
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    tenant_conn = sqlite3.connect(str(db_path))
-    for stmt in schema_stmts:
-        try:
-            tenant_conn.execute(stmt)
-        except sqlite3.OperationalError:
-            pass  # table/index already exists
-    tenant_conn.commit()
-
-    # Seed BusinessSettings row
-    db_tier = TIER_DB_MAP.get(tier.lower(), 'starter')
-    cur = tenant_conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM business_settings")
-    if cur.fetchone()[0] == 0:
-        cur.execute(
-            "INSERT INTO business_settings (business_name, tier) VALUES (?, ?)",
-            (business_name, db_tier)
+    if not SCHEMA_SQL.exists():
+        raise ProvisionError(
+            f"schema.sql not found at {SCHEMA_SQL}. "
+            "Ensure it has been committed to the repo and pulled to the VPS."
         )
-        tenant_conn.commit()
-    tenant_conn.close()
+
+    schema = SCHEMA_SQL.read_text(encoding='utf-8')
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.executescript(schema)
+        conn.commit()
+
+        # Verify the critical table exists
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='business_settings'")
+        if not cur.fetchone():
+            raise ProvisionError("business_settings table missing after applying schema.sql.")
+
+        # Seed BusinessSettings row
+        db_tier = TIER_DB_MAP.get(tier.lower(), 'starter')
+        cur.execute("SELECT COUNT(*) FROM business_settings")
+        if cur.fetchone()[0] == 0:
+            cur.execute(
+                "INSERT INTO business_settings (tier) VALUES (?)",
+                (db_tier,)
+            )
+            conn.commit()
+    finally:
+        conn.close()
 
 
 # ── Step 3: Seed admin user ───────────────────────────────────────────────────
