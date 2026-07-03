@@ -15,7 +15,9 @@ os.chdir(DEMO_DIR)
 os.environ.setdefault('SECRET_KEY', 'schema-gen-tmp')
 
 tmp_db = os.path.join(tempfile.gettempdir(), 'sniffhq_schema_gen.db')
-os.environ['DATABASE_URL'] = f'sqlite:///{tmp_db}'
+# SQLAlchemy requires forward slashes in the URI, even on Windows
+tmp_db_uri = tmp_db.replace('\\', '/')
+os.environ['DATABASE_URL'] = f'sqlite:///{tmp_db_uri}'
 
 # Remove any previous temp DB
 if os.path.exists(tmp_db):
