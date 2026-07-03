@@ -132,47 +132,47 @@ FLASK_DEBUG=0
 # ── Step 2: Init DB ───────────────────────────────────────────────────────────
 
 def _init_db(db_path: Path, secret_key: str, business_name: str, tier: str):
-    """Run db.create_all() inside the SniffHQDemo app with tenant env vars."""
-    # Use SniffHQDemo's own venv Python so all its models/deps are available
-    demo_python = SNIFFHQ_APP_DIR / 'venv' / 'Scripts' / 'python.exe'
-    if not demo_python.exists():
-        raise ProvisionError(f"SniffHQDemo venv Python not found at {demo_python}")
+    """
+    Clone the schema from the live SniffHQDemo database into the tenant DB,
+    then seed a BusinessSettings row. This avoids subprocess/venv issues entirely.
+    """
+    demo_db = SNIFFHQ_APP_DIR / 'instance' / 'sniffhq.db'
+    if not demo_db.exists():
+        raise ProvisionError(f"Demo database not found at {demo_db} — ensure SniffHQDemo has been run at least once.")
 
-    env = {
-        **os.environ,
-        'SECRET_KEY':   secret_key,
-        'DATABASE_URL': f'sqlite:///{db_path.as_posix()}',
-    }
-    init_script = (
-        "import sys; sys.path.insert(0, '.'); "
-        "from app import create_app, db; "
-        "app = create_app(); "
-        "ctx = app.app_context(); ctx.push(); "
-        "db.create_all(); "
-        "print('schema ok')"
-    )
-    result = subprocess.run(
-        [str(demo_python), '-c', init_script],
-        cwd=str(SNIFFHQ_APP_DIR),
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise ProvisionError(f"db.create_all() failed:\n{result.stderr}\n{result.stdout}")
+    # Extract CREATE TABLE + CREATE INDEX statements from the demo DB
+    demo_conn = sqlite3.connect(str(demo_db))
+    schema_stmts = []
+    for row in demo_conn.execute(
+        "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type DESC, name"
+    ):
+        schema_stmts.append(row[0])
+    demo_conn.close()
+
+    if not schema_stmts:
+        raise ProvisionError("Demo database schema is empty — run SniffHQDemo once to populate it.")
+
+    # Apply schema to fresh tenant DB
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    tenant_conn = sqlite3.connect(str(db_path))
+    for stmt in schema_stmts:
+        try:
+            tenant_conn.execute(stmt)
+        except sqlite3.OperationalError:
+            pass  # table/index already exists
+    tenant_conn.commit()
 
     # Seed BusinessSettings row
     db_tier = TIER_DB_MAP.get(tier.lower(), 'starter')
-    conn = sqlite3.connect(db_path)
-    cur  = conn.cursor()
+    cur = tenant_conn.cursor()
     cur.execute("SELECT COUNT(*) FROM business_settings")
     if cur.fetchone()[0] == 0:
         cur.execute(
             "INSERT INTO business_settings (business_name, tier) VALUES (?, ?)",
             (business_name, db_tier)
         )
-        conn.commit()
-    conn.close()
+        tenant_conn.commit()
+    tenant_conn.close()
 
 
 # ── Step 3: Seed admin user ───────────────────────────────────────────────────
