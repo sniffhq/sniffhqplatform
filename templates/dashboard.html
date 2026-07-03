@@ -30,6 +30,10 @@
                   padding:2px 8px; border-radius:20px; font-weight:600; }
     .badge-tier.professional { background:#fef3c7; color:#92400e; }
     .badge-tier.enterprise   { background:#ede9fe; color:#5b21b6; }
+    .badge-ssl  { background:#d1fae5; color:#065f46; font-size:.7rem;
+                  padding:3px 10px; border-radius:20px; font-weight:700; }
+    .badge-ssl-pending { background:#fef3c7; color:#92400e; font-size:.7rem;
+                         padding:3px 10px; border-radius:20px; font-weight:700; }
     .btn-sm-act { font-size:.75rem; padding:3px 10px; border-radius:6px; }
   </style>
 </head>
@@ -107,6 +111,7 @@
             <th>URL</th>
             <th>Port</th>
             <th>Status</th>
+            <th>SSL</th>
             <th>Provisioned</th>
             <th></th>
           </tr>
@@ -135,6 +140,19 @@
             </td>
             <td style="color:#64748b;font-size:.8rem;">
               {{ t.provisioned_at.strftime('%b %d, %Y') if t.provisioned_at }}
+            </td>
+            <td id="ssl-{{ t.id }}">
+              {% if t.ssl_active %}
+                <span class="badge-ssl"><i class="fas fa-lock me-1"></i>Active</span>
+              {% else %}
+                <form method="POST" action="{{ url_for('activate_ssl', tenant_id=t.id) }}"
+                      onsubmit="return confirm('Run SSL provisioning for {{ t.slug }}.sniffhq.app?\n\nEnsure at least 60 seconds have passed since provisioning so DNS has propagated.')">
+                  <button class="badge-ssl-pending border-0 cursor-pointer" title="Activate SSL"
+                          style="cursor:pointer;">
+                    <i class="fas fa-lock-open me-1"></i>Activate SSL
+                  </button>
+                </form>
+              {% endif %}
             </td>
             <td class="pe-4">
               <div class="d-flex gap-1">

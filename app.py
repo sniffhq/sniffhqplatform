@@ -43,6 +43,7 @@ class Tenant(db.Model):
     tier            = db.Column(db.String(50),  nullable=False)
     status          = db.Column(db.String(20),  default='active')   # active | suspended
     port            = db.Column(db.Integer,     nullable=True)
+    ssl_active      = db.Column(db.Boolean,     default=False)
     provisioned_at  = db.Column(db.DateTime,    default=datetime.utcnow)
     notes           = db.Column(db.Text,        nullable=True)
 
@@ -276,6 +277,8 @@ def activate_ssl(tenant_id):
     try:
         from provisioner import provision_ssl, ProvisionError
         provision_ssl(t.slug)
+        t.ssl_active = True
+        db.session.commit()
         flash(f'SSL certificate activated for {t.slug}.sniffhq.app.', 'success')
     except Exception as e:
         flash(f'SSL activation failed: {e}', 'error')
